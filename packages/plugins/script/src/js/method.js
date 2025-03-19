@@ -10,7 +10,7 @@
  *
  */
 
-import { ref, reactive, watchEffect, onActivated, nextTick } from 'vue'
+import { ref, reactive, onActivated, nextTick, watch } from 'vue'
 import { useCanvas, useModal, useNotify } from '@opentiny/tiny-engine-meta-register'
 import { string2Ast, ast2String, insertName, formatString } from '@opentiny/tiny-engine-common/js/ast'
 import { constants } from '@opentiny/tiny-engine-utils'
@@ -90,7 +90,7 @@ export const saveMethod = ({ name, content }) => {
   useCanvas().updateSchema({ methods: { ...methods, [name]: methodItem } })
 }
 
-const saveMethods = () => {
+const saveMethods = async () => {
   const { message } = useModal()
   if (!state.isChanged || state.hasErrorPopup) {
     return false
@@ -136,7 +136,14 @@ const saveMethods = () => {
 
   useCanvas().updateSchema({ methods: newMethods })
   useCanvas().setSaved(false)
+
+  // 这里需要先置空，再设置回来真正的值, 目的是让 monaco 感知到变化, 更新内容。
+  const newScript = getScriptString()
+  state.script = ''
+  await nextTick()
+  state.script = newScript
   state.isChanged = false
+
   useNotify({
     type: 'success',
     message: '保存成功！'
@@ -213,8 +220,8 @@ export const highlightMethod = (name) => {
 }
 
 export default ({ emit }) => {
-  watchEffect(() => {
-    state.script = getScriptString()
+  watch(getScriptString, (newScript) => {
+    state.script = newScript
   })
 
   onActivated(() => {
