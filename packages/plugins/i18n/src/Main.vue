@@ -119,7 +119,7 @@
   </plugin-panel>
 </template>
 
-<script lang="jsx">
+<script lang="tsx">
 import { computed, ref, watchEffect, reactive, onMounted, nextTick, resolveComponent, watch, provide } from 'vue'
 import useClipboard from 'vue-clipboard3'
 import { Grid, GridColumn, Input, Popover, Button, FileUpload, Loading, Tooltip, Select } from '@opentiny/vue'
@@ -350,6 +350,8 @@ export default {
         copyTipContent.value = '复制成功'
       } catch (e) {
         copyTipContent.value = '复制失败'
+        // eslint-disable-next-line no-console
+        console.error('Clipboard operation failed:', e)
       } finally {
         setTimeout(() => {
           copyRowIndex.value = ''
