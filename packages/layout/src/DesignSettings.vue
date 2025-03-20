@@ -44,7 +44,7 @@
   />
 </template>
 
-<script>
+<script lang="ts">
 import { computed, ref, watch, toRefs } from 'vue'
 import { Tabs, TabItem } from '@opentiny/vue'
 import { useLayout } from '@opentiny/tiny-engine-meta-register'

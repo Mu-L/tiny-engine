@@ -40,7 +40,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import { useThrottleFn } from '@vueuse/core'
 import { inject, ref, computed, onMounted, provide } from 'vue'
 import { useLayout } from '@opentiny/tiny-engine-meta-register'

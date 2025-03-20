@@ -95,7 +95,7 @@
   />
 </template>
 
-<script>
+<script lang="ts">
 import { reactive, ref, watch, computed } from 'vue'
 import { Popover, Tooltip } from '@opentiny/vue'
 import { VueDraggableNext } from 'vue-draggable-next'
@@ -125,9 +125,9 @@ export default {
   },
   emits: ['click', 'node-click'],
   setup(props, { emit }) {
-    const components = {}
-    const iconComponents = {}
-    const pluginRef = ref(null)
+    const components: any = {}
+    const iconComponents: any = {}
+    const pluginRef = ref<any>(null)
     const { isTemporaryPage } = usePage()
     const pluginState = useLayout().getPluginState()
 
