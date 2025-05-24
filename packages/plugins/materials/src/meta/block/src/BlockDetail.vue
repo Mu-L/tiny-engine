@@ -16,19 +16,13 @@
         <div>{{ detail?.current_history?.message }}</div>
         <div class="block-item-history">{{ detail?.current_history?.updated_at }}</div>
       </div>
-      <div
-        v-if="!isSettingPanel && !isShortcutPanel"
-        class="block-detail-item block-detail-show-more"
-        @click="openHistory"
-      >
+      <div v-if="!isSettingPanel && !isShortcutPanel" class="block-detail-item block-detail-show-more"
+        @click="openHistory">
         <span>查看历史备份</span>
         <icon-double-right></icon-double-right>
       </div>
-      <div
-        v-if="!isDefaultGroupId(selectedGroup.groupId) && !isSettingPanel && !isShortcutPanel"
-        class="block-delete"
-        @click="deleteBlock(selectedBlock || detail?.id)"
-      >
+      <div v-if="!isDefaultGroupId(selectedGroup.groupId) && !isSettingPanel && !isShortcutPanel"
+        class="block-delete" @click="deleteBlock(selectedBlock || detail?.id)">
         <tiny-button :icon="IconDel">Delete</tiny-button>
       </div>
     </div>
@@ -41,7 +35,7 @@ import { IconDel, iconDoubleRight } from '@opentiny/vue-icon'
 import { inject } from 'vue'
 import { useBlock, useModal, getMetaApi, META_SERVICE } from '@opentiny/tiny-engine-meta-register'
 import { requestUpdateGroup, fetchGroupBlocksById } from './http'
-import { setHistoryPanelVisible } from './js/usePanel'
+import { setBlockVersionPanelVisible } from './js/usePanel'
 
 export default {
   components: {
@@ -52,7 +46,7 @@ export default {
   props: {
     detail: {
       type: Object,
-      default: () => {}
+      default: () => { }
     },
     isSettingPanel: {
       type: Boolean,
@@ -95,7 +89,7 @@ export default {
       confirm({ title, status, message: messageRender, exec })
     }
 
-    const openHistory = () => setHistoryPanelVisible(true)
+    const openHistory = () => setBlockVersionPanelVisible(true)
 
     return {
       isDefaultGroupId,
@@ -160,6 +154,7 @@ export default {
       padding: 8px 12px;
       color: var(--te-materials-block-detail-text-color);
       font-size: 12px;
+
       span {
         margin-right: 4px;
       }
@@ -177,6 +172,7 @@ export default {
 
     .block-delete {
       padding: 12px 10px 10px;
+
       .tiny-button {
         padding: 0 8px;
       }
@@ -188,6 +184,7 @@ export default {
       &:not(:last-child) {
         border: none;
       }
+
       &:last-child {
         .block-detail-item:not(.block-detail-show-more) {
           display: none;
