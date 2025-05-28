@@ -325,6 +325,9 @@ export default {
     word-wrap: break-word;
     height: auto;
     line-height: 16px;
+    .text {
+      color: var(--te-page-manage-tip-text-color);
+    }
     .tip-text {
       width: 100%;
       color: var(--te-page-manage-tip-text-color);
@@ -337,7 +340,7 @@ export default {
 </style>
 <style lang="less">
 .tiny-select-dropdown.parent-fold-select-dropdown {
-  padding: 8px 0;
+  padding: 8px;
   .tiny-tree {
     .tiny-tree-node {
       .tiny-tree-node__content {

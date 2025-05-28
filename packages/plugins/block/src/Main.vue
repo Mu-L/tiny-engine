@@ -108,7 +108,7 @@
           </span>
           <template #dropdown>
             <tiny-dropdown-menu
-              popper-class="my-class"
+              popper-class="block-footer-dropdown"
               placement="top"
               :options="state.sortOptions"
             ></tiny-dropdown-menu>
@@ -530,6 +530,12 @@ export default {
     .tiny-dropdown__suffix-inner {
       color: var(--te-block-panel-footer-icon-color);
       height: 10px;
+      .tiny-svg {
+        fill: currentcolor;
+      }
+    }
+    .tiny-dropdown__title {
+      font-size: var(--te-base-font-size-base);
     }
   }
   :deep(.tiny-dropdown-menu) {
@@ -556,6 +562,7 @@ export default {
   line-height: 24px;
 }
 :deep(.tiny-dropdown-item) {
+  font-size: var(--te-base-font-size-base);
   &:not(.is-disabled):active,
   &:not(.is-disabled):hover,
   &:focus {
