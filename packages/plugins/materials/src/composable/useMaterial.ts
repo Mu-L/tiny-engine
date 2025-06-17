@@ -75,26 +75,6 @@ const getSnippet = (component: string) => {
   return schema
 }
 
-const generateNode = ({ type, component }: { type: string; component: string }) => {
-  const snippet = getSnippet(component) || {}
-
-  const schema: Schema & Required<Pick<Schema, 'props'>> = {
-    componentName: component,
-    ...snippet,
-    props: {
-      ...snippet.props,
-      className: getOptions(meta.id).useBaseStyle ? getOptions(meta.id).componentBaseStyle.className : ''
-    }
-  }
-
-  if (type === 'block') {
-    schema.componentType = 'Block'
-    schema.props.className = getOptions(meta.id).useBaseStyle ? getOptions(meta.id).blockBaseStyle.className : ''
-  }
-
-  return schema
-}
-
 /**
  * 获取物料组件的配置信息
  * @returns
@@ -502,7 +482,29 @@ const initMaterial = ({ isInit = true, appData = {} }: InitMaterialOptions = {})
     })
   }
 }
+const generateNode = ({ type, component }) => {
+  const snippet = getSnippet(component) || {}
+  const material = getMaterial(component)
+  // 判断是否要加基础样式
+  const materialUseBaseStyle = material.configure?.useBaseStyle
+  const globalUseBaseStyle = getOptions(meta.id).useBaseStyle
+  const useBaseStyle = globalUseBaseStyle && materialUseBaseStyle !== false
+  const schema = {
+    componentName: component,
+    ...snippet,
+    props: {
+      ...snippet.props,
+      className: useBaseStyle ? getOptions(meta.id).componentBaseStyle.className : ''
+    }
+  }
 
+  if (type === 'block') {
+    schema.componentType = 'Block'
+    schema.props.className = getOptions(meta.id).useBaseStyle ? getOptions(meta.id).blockBaseStyle.className : ''
+  }
+
+  return schema
+}
 const refreshMaterial = async () => {
   clearMaterials()
   initMaterial()
