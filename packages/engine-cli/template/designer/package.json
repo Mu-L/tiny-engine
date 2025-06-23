@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@opentiny/tiny-engine": "^2.6.0",
+    "@opentiny/tiny-engine-meta-register": "^2.6.0",
     "@opentiny/tiny-engine-utils": "^2.6.0",
     "@opentiny/vue": "~3.20.0",
     "@opentiny/vue-design-smb": "~3.20.0",
