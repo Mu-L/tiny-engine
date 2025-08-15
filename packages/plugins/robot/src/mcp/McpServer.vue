@@ -15,6 +15,7 @@
     :market-category-options="[]"
     :loading="loading"
     :market-loading="marketLoading"
+    :show-market-tab="false"
     @plugin-expand="handlePluginExpand"
     @plugin-add="updateMcpServerStatus"
     @plugin-toggle="handlePluginToggle"
@@ -79,6 +80,13 @@ onMounted(() => {
     display: none !important;
   }
 }
+:deep(.mcp-server-picker__content-item) {
+  .plugin-card__operations {
+    .tiny-popconfirm {
+      display: none !important;
+    }
+  }
+}
 
 :deep(.mcp-server-picker__content) {
   .tiny-tabs.tiny-tabs .tiny-tabs__header .tiny-tabs__nav {
@@ -87,6 +95,9 @@ onMounted(() => {
   .tiny-tabs.tiny-tabs .tiny-tabs__header .tiny-tabs__item {
     border: none;
     background-color: unset;
+  }
+  .tiny-tabs.tiny-tabs .tiny-tabs__header .tiny-tabs__nav {
+    width: 160px;
   }
 }
 

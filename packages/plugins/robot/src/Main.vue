@@ -446,7 +446,7 @@ export default {
 }
 </script>
 
-<style lang="less" scope>
+<style lang="less" scoped>
 .robot-img {
   display: flex;
   justify-content: center;
@@ -466,12 +466,15 @@ export default {
   }
 }
 
-.tiny-container {
+:deep(.tiny-container) {
   container-type: inline-size;
 
   &.tr-container.tr-container {
     top: var(--base-top-panel-height);
     --tr-container-width: 400px;
+    .tr-container__dragging-bar {
+      display: none;
+    }
   }
 
   :deep(button.icon-btn) {

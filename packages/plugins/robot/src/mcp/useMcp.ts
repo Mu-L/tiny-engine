@@ -50,7 +50,7 @@ const MOCK_SERVERS: PluginInfo[] = [
 const mcpServers = ref<PluginInfo[]>([ENGINE_MCP_SERVER, ...MOCK_SERVERS])
 
 const inUseMcpServers = ref<PluginInfo[]>([
-  { ...ENGINE_MCP_SERVER, enabled: true, expanded: false, tools: [], toolCount: 0 }
+  { ...ENGINE_MCP_SERVER, enabled: true, expanded: true, tools: [], toolCount: 0 }
 ])
 
 const updateServerTools = (serverId: string, tools: PluginTool[]) => {
@@ -114,6 +114,8 @@ const connectMcpServer = (_server: PluginInfo) => {}
 const disconnectMcpServer = (_server: PluginInfo) => {}
 
 const updateMcpServerStatus = async (server: PluginInfo, added: boolean) => {
+  // 市场添加状态修改
+  server.added = added
   if (added) {
     const newServer: PluginInfo = {
       ...server,
