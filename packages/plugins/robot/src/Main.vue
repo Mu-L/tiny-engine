@@ -36,20 +36,27 @@
               <icon-new-session />
             </button>
           </template>
-          <div v-if="activeMessages.length === 0">
-            <tr-welcome title="AI助手" description="您好，我是您的开发小助手" :icon="welcomeIcon" class="robot-welcome">
-            </tr-welcome>
-            <tr-prompts
-              :items="promptItems"
-              :wrap="true"
-              item-class="prompt-item"
-              class="tiny-prompts"
-              @item-click="handlePromptItemClick"
-            ></tr-prompts>
+          <div class="robot-chat-container-content" ref="chatContainerRef">
+            <div v-if="activeMessages.length === 0">
+              <tr-welcome
+                title="AI助手"
+                description="您好，我是您的开发小助手"
+                :icon="welcomeIcon"
+                class="robot-welcome"
+              >
+              </tr-welcome>
+              <tr-prompts
+                :items="promptItems"
+                :wrap="true"
+                item-class="prompt-item"
+                class="tiny-prompts"
+                @item-click="handlePromptItemClick"
+              ></tr-prompts>
+            </div>
+            <tr-bubble-provider :content-renderers="contentRenderers" v-else>
+              <tr-bubble-list :items="activeMessages" :roles="roles" autoScroll></tr-bubble-list>
+            </tr-bubble-provider>
           </div>
-          <tr-bubble-provider :message-renderers="{ markdown: MarkdownRenderer }" v-else>
-            <tr-bubble-list :items="activeMessages" :roles="roles" autoScroll></tr-bubble-list>
-          </tr-bubble-provider>
           <template #footer>
             <tr-sender
               :maxlength="4000"
@@ -61,7 +68,7 @@
               @submit="sendContent(inputContent, false)"
             >
               <template #footer-left>
-                <mcp-server></mcp-server>
+                <mcp-server :position="mcpDrawerPosition"></mcp-server>
               </template>
             </tr-sender>
           </template>
@@ -73,7 +80,18 @@
 
 <script lang="ts">
 /* metaService: engine.plugins.robot.Main */
-import { ref, onMounted, watchEffect, type CSSProperties, h, resolveComponent } from 'vue'
+import {
+  ref,
+  onMounted,
+  watchEffect,
+  type CSSProperties,
+  h,
+  resolveComponent,
+  computed,
+  watch,
+  nextTick,
+  type Component
+} from 'vue'
 import { Notify, Loading, TinyPopover } from '@opentiny/vue'
 import { useCanvas, useHistory, usePage, useModal, getMetaApi, META_SERVICE } from '@opentiny/tiny-engine-meta-register'
 import { extend } from '@opentiny/vue-renderless/common/object'
@@ -85,6 +103,7 @@ import { getBlockContent, initBlockList, getAIModelOptions } from './js/robotSet
 import McpServer from './mcp/McpServer.vue'
 import useMcpServer from './mcp/useMcp'
 import MarkdownRenderer from './mcp/MarkdownRenderer.vue'
+import LoadingRenderer from './mcp/LoadingRenderer.vue'
 import { sendMcpRequest } from './mcp/utils'
 
 export default {
@@ -118,6 +137,8 @@ export default {
     const tokenValue = ref('')
     const showPopover = ref(false)
 
+    const chatContainerRef = ref(null)
+
     const { pageSettingState, getDefaultPage } = usePage()
     const ROOT_ID = pageSettingState.ROOT_ID
     const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
@@ -140,6 +161,14 @@ export default {
               displayMessages: [] // 专门用来进行展示的消息，非原始消息，仅作为展示但是不作为请求的发送
             })
       )
+    }
+
+    const scrollContent = async () => {
+      await nextTick()
+      const el = chatContainerRef.value as HTMLElement | null
+      if (el) {
+        el.scrollTop = el.scrollHeight
+      }
     }
 
     const createNewPage = (schema) => {
@@ -188,8 +217,7 @@ export default {
 
     const getAiRespMessage = (role = 'assistant', content) => ({
       role,
-      content,
-      name: 'AI'
+      content
     })
 
     const requestLoading = ref(false)
@@ -198,6 +226,7 @@ export default {
       if (useMcpServer().isToolsEnabled) {
         try {
           requestLoading.value = true
+          await scrollContent()
           await sendMcpRequest(messages.value, {
             model: selectedModel.value.value,
             headers: {
@@ -209,6 +238,7 @@ export default {
         } finally {
           inProcesing.value = false
           requestLoading.value = false
+          await scrollContent()
         }
         return
       }
@@ -236,14 +266,6 @@ export default {
         })
     }
 
-    const scrollContent = async () => {
-      await sleep(100)
-      const scrollElement = document.getElementById('chatgpt-window')
-      if (scrollElement) {
-        scrollElement.scrollTop = scrollElement.scrollHeight
-      }
-    }
-
     const resetContent = async () => {
       activeMessages.value = messages.value
       await scrollContent()
@@ -257,8 +279,7 @@ export default {
 
     const getMessage = (content) => ({
       role: 'user',
-      content,
-      name: 'John'
+      content
     })
 
     const sendContent = async (content, isModel) => {
@@ -412,11 +433,38 @@ export default {
 
     // 对话角色配置
     const roles: Record<string, BubbleRoleConfig> = {
-      assistant: { placement: 'start', avatar: aiAvatar, maxWidth: '90%', contentRenderer: MarkdownRenderer },
+      assistant: {
+        placement: 'start',
+        avatar: aiAvatar,
+        maxWidth: '90%',
+        contentRenderer: MarkdownRenderer,
+        customContentField: 'renderContent'
+      },
       user: { placement: 'end', avatar: userAvatar, maxWidth: '90%', contentRenderer: MarkdownRenderer }
     }
 
+    watch([() => activeMessages.value.length, () => activeMessages.value.at(-1)?.renderContent?.length ?? 0], () => {
+      scrollContent()
+    })
+
+    const contentRenderers: Record<string, Component> = {
+      markdown: MarkdownRenderer,
+      loading: LoadingRenderer
+    }
+
+    const mcpDrawerPosition = computed(() => {
+      return {
+        type: 'fixed',
+        position: {
+          top: 'var(--base-top-panel-height)',
+          bottom: 0,
+          ...(fullscreen.value ? { left: 0 } : { right: 'var(--tr-container-width)' })
+        }
+      }
+    })
+
     return {
+      chatContainerRef,
       robotVisible,
       avatarUrl,
       chatWindowOpened,
@@ -439,8 +487,9 @@ export default {
       handlePromptItemClick,
       welcomeIcon,
       roles,
-      MarkdownRenderer,
-      requestLoading
+      contentRenderers,
+      requestLoading,
+      mcpDrawerPosition
     }
   }
 }
@@ -486,9 +535,37 @@ export default {
   }
 
   .tr-bubble-list {
+    font-size: 14px;
     flex: 1;
     .tr-bubble {
       word-break: break-word;
+    }
+    ul,
+    ol {
+      padding-left: 10px;
+    }
+    ul > li {
+      list-style: disc;
+    }
+    ol > li {
+      list-style: decimal;
+    }
+    table {
+      border-collapse: collapse; // 合并边框
+      border: 1px solid #ccc;
+      width: 100%;
+      margin: 1rem 0;
+      th,
+      td {
+        border: 1px solid #ccc; /* 单元格边框 */
+        padding: 8px;
+      }
+      tr:nth-child(even) {
+        background-color: #f2f2f2;
+      }
+      tr:hover {
+        background-color: #e6f7ff;
+      }
     }
   }
 
