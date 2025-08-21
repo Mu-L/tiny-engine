@@ -104,7 +104,8 @@ import McpServer from './mcp/McpServer.vue'
 import useMcpServer from './mcp/useMcp'
 import MarkdownRenderer from './mcp/MarkdownRenderer.vue'
 import LoadingRenderer from './mcp/LoadingRenderer.vue'
-import { sendMcpRequest } from './mcp/utils'
+import { sendMcpRequest, serializeError } from './mcp/utils'
+import type { RobotMessage } from './mcp/types'
 
 export default {
   components: {
@@ -127,7 +128,7 @@ export default {
     const avatarUrl = ref('')
     const chatWindowOpened = ref(true)
     let sessionProcess = null
-    const messages = ref([])
+    const messages = ref<RobotMessage[]>([])
     const activeMessages = ref([])
     const connectedFailed = ref(false)
     const inputContent = ref('')
@@ -234,7 +235,18 @@ export default {
             }
           })
         } catch (error) {
-          messages.value[messages.value.length - 1].content = '连接失败'
+          const { renderContent } = messages.value.at(-1)!
+          if (renderContent?.length) {
+            if (renderContent.at(-1)!.type === 'loading') {
+              renderContent.pop()
+            }
+            renderContent.push({
+              type: 'text',
+              content: `连接失败, 请稍后重试: ${serializeError(error)}`
+            })
+          } else {
+            messages.value.at(-1)!.content = `连接失败, 请稍后重试: ${serializeError(error)}`
+          }
         } finally {
           inProcesing.value = false
           requestLoading.value = false
@@ -399,7 +411,7 @@ export default {
       },
       {
         label: '页面搭建场景',
-        description: '如何生成表单嵌进我的网站？',
+        description: '给当前页面中添加一个问卷调查表单',
         icon: h('span', { style: { fontSize: '18px' } as CSSProperties }, '✨')
       },
       {
@@ -431,7 +443,8 @@ export default {
         contentRenderer: MarkdownRenderer,
         customContentField: 'renderContent'
       },
-      user: { placement: 'end', avatar: userAvatar, maxWidth: '90%', contentRenderer: MarkdownRenderer }
+      user: { placement: 'end', avatar: userAvatar, maxWidth: '90%', contentRenderer: MarkdownRenderer },
+      system: { hidden: true }
     }
 
     watch([() => activeMessages.value.length, () => activeMessages.value.at(-1)?.renderContent?.length ?? 0], () => {

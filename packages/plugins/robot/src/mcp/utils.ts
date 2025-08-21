@@ -39,6 +39,18 @@ const parseArgs = (args: string) => {
   }
 }
 
+export const serializeError = (err: unknown): string => {
+  if (err instanceof Error) {
+    return JSON.stringify({ name: err.name, message: err.message })
+  }
+  if (typeof err === 'string') return err
+  try {
+    return JSON.stringify(err)
+  } catch {
+    return String(err)
+  }
+}
+
 const handleToolCall = async (
   res: LLMResponse,
   tools: RequestTool[],
@@ -75,18 +87,27 @@ const handleToolCall = async (
         formatPretty: true
       }
       currentMessage.renderContent.push(currentToolMessage)
-      const toolCallResult = await useMcpServer().callTool(name, parsedArgs)
+      let toolCallResult: string
+      let toolCallStatus: 'success' | 'failed'
+      try {
+        const resp = await useMcpServer().callTool(name, parsedArgs)
+        toolCallStatus = 'success'
+        toolCallResult = resp.content
+      } catch (error) {
+        toolCallStatus = 'failed'
+        toolCallResult = serializeError(error)
+      }
       toolMessages.push({
         type: 'text',
-        content: toolCallResult.content,
+        content: toolCallResult,
         role: 'tool',
         tool_call_id: tool.id
       })
 
-      currentMessage.renderContent.at(-1)!.status = 'success'
+      currentMessage.renderContent.at(-1)!.status = toolCallStatus
       currentMessage.renderContent.at(-1)!.content = {
         params: parsedArgs,
-        result: toolCallResult.content
+        result: toolCallResult
       }
     }
     currentMessage.renderContent.push({ type: 'loading', content: '' })
@@ -113,12 +134,19 @@ export const sendMcpRequest = async (messages: LLMMessage[], options: RequestOpt
   const tools = await useMcpServer().getLLMTools()
   requestOptions = options
   messages.at(-1)!.renderContent = [{ type: 'loading', content: '' }]
-  const res = await fetchLLM(formatMessages(messages.slice(0, -1)), tools, options)
+  const historyRaw = toRaw(messages.slice(0, -1)) as LLMMessage[]
+  const res = await fetchLLM(formatMessages(historyRaw), tools, options)
   delete messages.at(-1)!.renderContent
   const hasToolCall = res.choices[0].message.tool_calls?.length > 0
   if (hasToolCall) {
     await handleToolCall(res, tools, messages)
-    messages.at(-1)!.content = messages.at(-1)!.renderContent.at(-1)!.content
+    const lastMsg: any = messages.at(-1) as any
+    const renderList: any[] | undefined = Array.isArray(lastMsg.renderContent)
+      ? (lastMsg.renderContent as any[])
+      : undefined
+    const lastRendered: any = renderList && renderList.length > 0 ? renderList[renderList.length - 1] : undefined
+    const renderedContent: unknown = lastRendered?.content
+    lastMsg.content = typeof renderedContent === 'string' ? renderedContent : JSON.stringify(renderedContent ?? '')
   } else {
     messages.at(-1)!.content = res.choices[0].message.content
   }
