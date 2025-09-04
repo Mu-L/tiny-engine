@@ -1,10 +1,14 @@
 <template>
   <div class="robot">
-    <div title="AI对话框" class="robot-img">
-      <svg-icon name="AI" @click="openAIRobot"></svg-icon>
-    </div>
-    <Teleport to="body">
-      <div class="robot-chat-container">
+    <toolbar-base
+      content="AI对话框"
+      :icon="options.icon?.default || options?.icon"
+      :options="options"
+      @click-api="openAIRobot"
+    >
+    </toolbar-base>
+    <Teleport v-if="showTeleport" defer :to="fullscreen ? 'body' : '.tiny-engine-right-robot'">
+      <div class="robot-chat-container" :class="{ 'robot-chat-container-fullscreen': fullscreen }">
         <tr-container
           v-if="robotVisible"
           v-model:fullscreen="fullscreen"
@@ -89,8 +93,8 @@
                 </div>
               </template>
               <template #footer-left>
-                <mcp-server :position="mcpDrawerPosition" v-if="aiType === MCP_TYPE"></mcp-server>
                 <robot-type-select :aiType="aiType" @typeChange="typeChange"></robot-type-select>
+                <mcp-server :position="mcpDrawerPosition" v-if="aiType === TALK_TYPE"></mcp-server>
               </template>
             </tr-sender>
           </template>
@@ -119,6 +123,7 @@ import {
 } from 'vue'
 import { Notify, Loading, TinyPopover, TinyDialogBox } from '@opentiny/vue'
 import { useCanvas, useModal, getMetaApi, META_SERVICE } from '@opentiny/tiny-engine-meta-register'
+import { ToolbarBase } from '@opentiny/tiny-engine-common'
 import {
   TrContainer,
   TrWelcome,
@@ -154,12 +159,16 @@ import LoadingRenderer from './mcp/LoadingRenderer.vue'
 import { sendMcpRequest, serializeError } from './mcp/utils'
 import type { RobotMessage } from './mcp/types'
 import RobotTypeSelect from './RobotTypeSelect.vue'
+import McpIconComponent from './icon-prompt/mcp-icon.vue'
+import PageIconComponent from './icon-prompt/page-icon.vue'
+import StudyIconComponent from './icon-prompt/study-icon.vue'
 
 export default {
   components: {
     TinyPopover: TinyPopover as unknown,
     TinyDialogBox: TinyDialogBox as unknown,
     RobotSettingPopover,
+    ToolbarBase,
     TrContainer,
     TrWelcome,
     TrPrompts,
@@ -171,6 +180,12 @@ export default {
     McpServer,
     TrBubbleProvider,
     RobotTypeSelect
+  },
+  props: {
+    options: {
+      type: Object,
+      default: () => ({})
+    }
   },
   emits: ['close-chat'],
   setup() {
@@ -196,6 +211,7 @@ export default {
     const MESSAGE_TIP = '已生成新的页面效果，请点击下方按钮应用schema'
     const aiType = ref(TALK_TYPE)
     const chatContainerRef = ref(null)
+    const showTeleport = ref(false)
     const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
     watchEffect(() => {
       avatarUrl.value = 'img/defaultAvator.png'
@@ -252,7 +268,7 @@ export default {
           return item
         })
       }
-      if (aiType.value === MCP_TYPE) {
+      if (useMcpServer().isToolsEnabled && aiType.value === TALK_TYPE) {
         firstContent = `${getBlockContent()}\n${codeRules}\n${firstMessage.content[0]?.text || ''}`
       }
 
@@ -333,7 +349,7 @@ export default {
     // 发送流式请求
     const sendStreamRequest = async () => {
       const requestData = getSendSeesionProcess()
-      if (useMcpServer().isToolsEnabled && aiType.value === MCP_TYPE) {
+      if (useMcpServer().isToolsEnabled && aiType.value === TALK_TYPE) {
         try {
           requestLoading.value = true
           await scrollContent()
@@ -533,6 +549,9 @@ export default {
     }
 
     onMounted(async () => {
+      setTimeout(() => {
+        showTeleport.value = true
+      }, 1000)
       const loadingInstance = Loading.service({
         text: '初始化中，请稍等...',
         customClass: 'chat-loading',
@@ -606,18 +625,18 @@ export default {
       {
         label: 'MCP工具',
         description: '帮我查询当前的页面列表',
-        icon: h('span', { style: { fontSize: '18px' } as CSSProperties }, '🔧'),
+        icon: h(McpIconComponent),
         badge: 'NEW'
       },
       {
         label: '页面搭建场景',
         description: '给当前页面中添加一个问卷调查表单',
-        icon: h('span', { style: { fontSize: '18px' } as CSSProperties }, '✨')
+        icon: h(PageIconComponent)
       },
       {
         label: '学习/知识型场景',
         description: 'Vue3 和 React 有什么区别？',
-        icon: h('span', { style: { fontSize: '18px' } as CSSProperties }, '🤔')
+        icon: h(StudyIconComponent)
       }
     ]
 
@@ -796,6 +815,7 @@ export default {
       TALK_TYPE,
       MCP_TYPE,
       BUILD_TYPE,
+      showTeleport,
       sendContent,
       endContent,
       changeApiKey,
@@ -817,6 +837,12 @@ export default {
 </script>
 
 <style lang="less" scoped>
+.robot {
+  margin-right: 8px;
+}
+.robot-chat-container {
+  height: 100%;
+}
 .robot-img {
   display: flex;
   justify-content: center;
@@ -840,8 +866,9 @@ export default {
   container-type: inline-size;
 
   &.tr-container.tr-container {
-    top: var(--base-top-panel-height);
     --tr-container-width: 400px;
+    position: relative;
+    height: 100%;
     .tr-container__dragging-bar {
       display: none;
     }
@@ -897,7 +924,7 @@ export default {
   }
 
   .operations-setting {
-    font-size: 20px;
+    font-size: 28px;
     padding: 4px;
   }
 
@@ -948,9 +975,31 @@ export default {
       font-size: 20px;
     }
   }
+}
 
-  .footer-sender {
-    padding: 10px 15px;
+.robot-chat-container-fullscreen {
+  :deep(.tiny-container) {
+    container-type: inline-size;
+
+    &.tr-container.tr-container {
+      top: var(--base-top-panel-height);
+      position: fixed;
+      height: auto;
+    }
+  }
+  .operations-setting {
+    font-size: 20px;
+  }
+  @media (min-width: 1280px) {
+    .robot-chat-container-content {
+      width: 1280px;
+      margin: 0 auto;
+    }
+    .footer-sender {
+      width: 1280px;
+      margin: 0 auto;
+      padding: 20px 15px;
+    }
   }
 }
 
@@ -971,6 +1020,9 @@ export default {
         display: none;
       }
     }
+  }
+  .tiny-sender__input-field-wrapper .tiny-textarea__inner {
+    font-size: 20px;
   }
 }
 :deep(.action-buttons__icon) {
