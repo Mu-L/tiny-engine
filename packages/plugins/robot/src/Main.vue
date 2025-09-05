@@ -130,13 +130,13 @@ import {
   TrPrompts,
   TrBubbleList,
   TrSender,
-  TrFeedback,
   TrAttachments,
   TrBubbleProvider
 } from '@opentiny/tiny-robot'
 import type { BubbleRoleConfig, PromptProps } from '@opentiny/tiny-robot'
 import { IconNewSession } from '@opentiny/tiny-robot-svgs'
 import SchemaRenderer from '@opentiny/tiny-schema-renderer'
+import { utils } from '@opentiny/tiny-engine-utils'
 import RobotSettingPopover from './RobotSettingPopover.vue'
 import {
   getBlockContent,
@@ -151,7 +151,7 @@ import {
 } from './js/robotSetting'
 import { PROMPTS } from './js/prompts'
 import * as jsonpatch from 'fast-json-patch'
-import { chatStream } from './js/utils'
+import { chatStream, checkComponentNameExists } from './js/utils'
 import McpServer from './mcp/McpServer.vue'
 import useMcpServer from './mcp/useMcp'
 import MarkdownRenderer from './mcp/MarkdownRenderer.vue'
@@ -162,6 +162,7 @@ import RobotTypeSelect from './RobotTypeSelect.vue'
 import McpIconComponent from './icon-prompt/mcp-icon.vue'
 import PageIconComponent from './icon-prompt/page-icon.vue'
 import StudyIconComponent from './icon-prompt/study-icon.vue'
+import { jsonrepair } from 'jsonrepair'
 
 export default {
   components: {
@@ -208,10 +209,11 @@ export default {
     const showPreview = ref(false)
     const singleAttachmentItems = ref([])
     const imageUrl = ref('')
-    const MESSAGE_TIP = '已生成新的页面效果，请点击下方按钮应用schema'
+    const MESSAGE_TIP = '已生成新的页面效果。'
     const aiType = ref(TALK_TYPE)
     const chatContainerRef = ref(null)
     const showTeleport = ref(false)
+    const { deepClone, string2Obj, reactiveObj2String: obj2String } = utils
     const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
     watchEffect(() => {
       avatarUrl.value = 'img/defaultAvator.png'
@@ -296,19 +298,20 @@ export default {
       id
     })
 
-    const setSchema = () => {
+    const setSchema = async (schema: any) => {
       const value = {
         ...pageState.pageSchema,
-        ...currentSchema.value,
+        ...schema,
         componentName: pageState.pageSchema.componentName
       }
       importSchema(value)
       setSaved(false)
       showPreview.value = false
+      await nextTick()
     }
 
     // 处理响应
-    const handleResponse = ({ id, chatMessage }: { id: string; chatMessage: any }) => {
+    const handleResponse = ({ id, chatMessage }: { id: string; chatMessage: any }, currentJson) => {
       try {
         if (aiType.value === BUILD_TYPE) {
           const regex = /```json([\s\S]*?)```/
@@ -317,7 +320,7 @@ export default {
           if (match && match[1] && JSON.parse(match[1]) && isValidFastJsonPatch(JSON.parse(match[1]))) {
             const newValue = JSON.parse(match[1])
             // 使用 applyPatch 修改 Schema
-            const result = newValue.reduce(jsonpatch.applyReducer, pageState.pageSchema)
+            const result = newValue.reduce(jsonpatch.applyReducer, currentJson)
 
             sessionProcess.messages.push(getAiRespMessage(JSON.stringify(result, null, 2), chatMessage.role))
             sessionProcess.displayMessages.push(getAiDisplayMessage(MESSAGE_TIP, chatMessage.role, result, id))
@@ -385,6 +388,9 @@ export default {
 
         let streamContent = ''
         const chatId = Date.now().toString()
+        const currentJson = deepClone(pageState.pageSchema)
+        let lastExecutionTime = 0
+        const throttleDelay = 3000
         await chatStream(
           {
             requestUrl: '/app-center/api/ai/chat',
@@ -402,6 +408,24 @@ export default {
                 }
                 streamContent += choice.delta.content
                 messages.value[messages.value.length - 1].content += choice.delta.content
+                const currentTime = Date.now()
+                if (currentTime - lastExecutionTime > throttleDelay) {
+                  try {
+                    const repaired = jsonrepair(streamContent)
+                    const parsedJson = JSON.parse(repaired)
+                    const result = parsedJson.reduce((acc, patch) => {
+                      return jsonpatch.applyPatch(acc, [patch], false, false).newDocument
+                    }, currentJson)
+                    const editorValue = string2Obj(obj2String(result))
+
+                    if (editorValue && checkComponentNameExists(result)) {
+                      setSchema(result)
+                    }
+                  } catch (error) {
+                    // error
+                  }
+                  lastExecutionTime = currentTime
+                }
               }
             },
             onError: (error) => {
@@ -413,14 +437,17 @@ export default {
               console.error('Stream error:', error)
             },
             onDone: () => {
-              handleResponse({
-                id: chatId,
-                chatMessage: {
-                  role: 'assistant',
-                  content: streamContent || '没有返回内容',
-                  name: 'AI'
-                }
-              })
+              handleResponse(
+                {
+                  id: chatId,
+                  chatMessage: {
+                    role: 'assistant',
+                    content: streamContent || '没有返回内容',
+                    name: 'AI'
+                  }
+                },
+                currentJson
+              )
             }
           },
           {
@@ -645,12 +672,6 @@ export default {
       sendContent(item.description, true)
     }
 
-    const getItemSchema = (item) => {
-      const targetMessage = messages.value.find((message) => message.id && message.id === item.id)
-
-      return targetMessage
-    }
-
     // Icon
     const getSvgIcon = (name: string, style?: CSSProperties) => {
       return h(resolveComponent('svg-icon'), { name, style: { fontSize: '32px', ...style } })
@@ -658,8 +679,6 @@ export default {
     const aiAvatar = getSvgIcon('AI')
     const userAvatar = getSvgIcon('user-head', { color: '#dfe1e6' })
     const welcomeIcon = getSvgIcon('AI', { fontSize: '48px' })
-    const saveIcon = getSvgIcon('save', { fontSize: '20px' })
-    const previewIcon = getSvgIcon('preview', { fontSize: '20px' })
 
     // 处理文件选择事件
     const handleSingleFilesSelected = (files: FileList | null, retry = false) => {
@@ -742,29 +761,7 @@ export default {
         avatar: aiAvatar,
         maxWidth: '90%',
         contentRenderer: MarkdownRenderer,
-        customContentField: 'renderContent',
-        slots: {
-          footer: ({ bubbleProps }) => {
-            return h(TrFeedback, {
-              style: {
-                display: getItemSchema(bubbleProps)?.schema && aiType.value === BUILD_TYPE ? 'block' : 'none'
-              },
-              actions: [
-                { name: 'run', label: '应用', icon: saveIcon },
-                { name: 'preview', label: '预览', icon: previewIcon }
-              ],
-              onAction(name) {
-                currentSchema.value = getItemSchema(bubbleProps)?.schema || {}
-                if (name === 'preview') {
-                  showPreview.value = true
-                }
-                if (name === 'run') {
-                  setSchema()
-                }
-              }
-            })
-          }
-        }
+        customContentField: 'renderContent'
       },
       user: { placement: 'end', avatar: userAvatar, maxWidth: '90%', contentRenderer: MarkdownRenderer },
       system: { hidden: true }
