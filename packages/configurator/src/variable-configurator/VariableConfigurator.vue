@@ -460,7 +460,7 @@ export default {
       if (
         props.modelValue?.value &&
         props.modelValue?.type === EXPRESSION_TYPE.JS_EXPRESSION &&
-        Object.keys(props.modelValue || {}).length === 2
+        Object.keys(props.modelValue || {}).length <= 3
       ) {
         return String(props.modelValue?.value)
       }
