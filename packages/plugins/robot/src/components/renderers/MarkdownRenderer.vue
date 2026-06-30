@@ -8,6 +8,7 @@ import DOMPurify from 'dompurify'
 import MarkdownIt from 'markdown-it'
 import type { Options } from 'markdown-it'
 import hljs from 'highlight.js/lib/core'
+import { extractMessageText } from '../../utils'
 import 'highlight.js/styles/github.css'
 
 // 按需加载语言
@@ -29,7 +30,7 @@ hljs.registerLanguage('xml', xml)
 hljs.registerLanguage('shell', shell)
 
 interface MarkdownMessage {
-  content: string
+  content: unknown
 }
 
 const props = defineProps({
@@ -71,7 +72,15 @@ const markdownIt = new MarkdownIt({
 })
 
 const renderContent = computed(() => {
-  return DOMPurify.sanitize(markdownIt.render(props.message.content))
+  let content = ''
+
+  if (typeof props.message.content === 'string') {
+    content = props.message.content
+  } else if (Array.isArray(props.message.content)) {
+    content = extractMessageText(props.message.content)
+  }
+
+  return DOMPurify.sanitize(markdownIt.render(content))
 })
 </script>
 

@@ -12,6 +12,8 @@ import {
 import type { CompletionChoice } from '@opentiny/tiny-robot-kit'
 import { STATUS, type MessageState } from '../../constants/status'
 import type { OpenAICompatibleProvider } from '../../services/OpenAICompatibleProvider'
+import { extractMessageText } from '../../utils/chat.utils'
+import { RobotMessageRole } from '../../types/chat.types'
 
 export interface ConversationAdapterOptions {
   provider: Pick<OpenAICompatibleProvider, 'chatStream'>
@@ -100,7 +102,8 @@ const createResponseProvider = (
 }
 
 const updateMessageMetadata = (currentMessage: ChatMessage, chunk: ChatCompletion, choice?: CompletionChoice) => {
-  currentMessage.role = choice?.delta?.role || choice?.message?.role || currentMessage.role || 'assistant'
+  currentMessage.role =
+    choice?.delta?.role || choice?.message?.role || currentMessage.role || RobotMessageRole.Assistant
   currentMessage.loading = undefined
   currentMessage.renderContent ||= []
   currentMessage.metadata ||= {}
@@ -180,7 +183,7 @@ export function useConversationAdapter(options: ConversationAdapterOptions) {
 
   const saveConversations = () => {
     conversations.value.forEach((conversation) => {
-      void saveConversation(conversation)
+      saveConversation(conversation)
     })
   }
 
@@ -198,7 +201,7 @@ export function useConversationAdapter(options: ConversationAdapterOptions) {
       currentConversationMetadata = conversation.metadata
     }
     conversation.updatedAt = Date.now()
-    void saveConversation(conversation)
+    saveConversation(conversation)
   }
 
   const updateTitle = (conversationId: string, title?: string) => {
@@ -258,7 +261,7 @@ export function useConversationAdapter(options: ConversationAdapterOptions) {
           }
         }
         currentConversationMetadata = conversation.metadata || {}
-        void saveConversation(conversation)
+        saveConversation(conversation)
         return currentId
       }
     }
@@ -328,7 +331,7 @@ export function useConversationAdapter(options: ConversationAdapterOptions) {
     const currentTitle = currentConversation.title
     if (currentTitle === defaultTitle && currentId) {
       const messageContent = getActiveEngine()?.messages.value.find((item) => item.role === 'user')?.content
-      const contentStr = typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent)
+      const contentStr = extractMessageText(messageContent) || JSON.stringify(messageContent)
       updateTitle(currentId, contentStr.substring(0, 20))
     }
   }

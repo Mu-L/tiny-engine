@@ -11,7 +11,7 @@
     </template>
 
     <div class="robot-chat-container-content" ref="chatContainerRef">
-      <div v-if="messages.filter((item) => item.role !== 'system').length === 0">
+      <div v-if="messages.filter((item) => item.role !== RobotMessageRole.System).length === 0">
         <tr-welcome title="AI助手" description="您好，我是您的开发小助手" :icon="welcomeIcon" class="robot-welcome">
         </tr-welcome>
         <tr-prompts
@@ -99,10 +99,18 @@ import {
   type RawFileAttachment,
   type BubbleContentRendererMatch
 } from '@opentiny/tiny-robot'
-import { type ChatMessage } from '@opentiny/tiny-robot-kit'
 import { GeneratingStatus } from '../../constants/status'
 import { LoadingRenderer, MarkdownRenderer, ImgRenderer } from '../renderers'
 import { useNotify } from '@opentiny/tiny-engine-meta-register'
+import {
+  RobotMessageContentType,
+  RobotMessageRole,
+  type MessageContentResolver,
+  type RobotInputContentPart,
+  type RobotMessage,
+  type RobotRenderContentItem
+} from '../../types'
+import { extractMessageText } from '../../utils'
 
 const props = defineProps({
   promptItems: {
@@ -113,7 +121,9 @@ const props = defineProps({
     type: Function
   },
   status: { type: String },
-  chatMode: { type: String },
+  messageContentResolver: {
+    type: Function as PropType<MessageContentResolver>
+  },
   allowFiles: {
     type: Boolean,
     default: false
@@ -139,7 +149,7 @@ const selectedAttachments = ref([])
 const robotVisible = defineModel<boolean>('show', { required: true })
 const fullscreen = defineModel<boolean>('fullscreen')
 const inputMessage = defineModel<string>('input', { required: true })
-const messages = defineModel<ChatMessage[]>('messages', { required: true })
+const messages = defineModel<RobotMessage[]>('messages', { required: true })
 const senderRef = ref<InstanceType<typeof TrSender> | null>(null)
 
 watch(
@@ -159,62 +169,28 @@ const contentRendererMatches = computed<BubbleContentRendererMatch[]>(() => [
   },
   ...Object.entries(props.bubbleRenderers).map(([type, renderer]) => ({
     priority: BubbleRendererMatchPriority.NORMAL,
-    find: (_message: any, content: any) => content?.type === type,
+    find: (_message: RobotMessage, content: RobotRenderContentItem) => content?.type === type,
     renderer
   })),
   {
     priority: BubbleRendererMatchPriority.NORMAL,
-    find: (message: any, content: any) => content?.type === 'tool' && message.tool_calls?.length,
+    find: (message: RobotMessage, content: RobotRenderContentItem) =>
+      content?.type === RobotMessageContentType.Tool && Boolean(message.tool_calls?.length),
     renderer: BubbleRenderers.Tools
   },
   {
     priority: BubbleRendererMatchPriority.NORMAL,
-    find: (message: any, content: any) =>
-      !message.loading && message.content && (!content?.type || ['markdown', 'text'].includes(content.type)),
+    find: (_message: RobotMessage, content: RobotRenderContentItem) =>
+      !content?.type || [RobotMessageContentType.Markdown, RobotMessageContentType.Text].includes(content.type as any),
     renderer: MarkdownRenderer
   },
   {
     priority: BubbleRendererMatchPriority.NORMAL,
-    find: (message: any) => message?.content?.[0]?.type === 'img' || message?.content?.[0]?.type === 'image',
+    find: (_message: RobotMessage, content: RobotRenderContentItem) =>
+      [RobotMessageContentType.Img, RobotMessageContentType.Image].includes(content?.type as any),
     renderer: ImgRenderer
   }
 ])
-
-const isAgentMessage = (message: any) => {
-  const hasAgentContent = message.renderContent?.some((item: any) => {
-    return item.type === 'agent-content' || item.type === 'agent-loading'
-  })
-  return message.metadata?.chatMode === 'agent' || hasAgentContent
-}
-
-const resolveAgentRenderContent = (message: any) => {
-  if (!isAgentMessage(message) || message.role !== 'assistant') {
-    return message.renderContent
-  }
-
-  const isLastMessage = messages.value.at(-1) === message
-  const isGenerating = Boolean(message.loading) || (isLastMessage && GeneratingStatus.includes(props.status as any))
-  const renderContent = isGenerating
-    ? message.renderContent
-    : message.renderContent.filter((item: any) => item.type !== 'agent-loading')
-  const agentContents = renderContent.filter((item: any) => item.type === 'agent-content')
-  const finalStatus = agentContents.findLast((item: any) => ['success', 'failed', 'fix'].includes(item.status))?.status
-
-  return renderContent.map((item: any) => {
-    if (item.type !== 'agent-content' || isGenerating) {
-      return item
-    }
-
-    if (!item.status || item.status === 'loading') {
-      return {
-        ...item,
-        status: finalStatus || message.metadata?.agentStatus || 'failed'
-      }
-    }
-
-    return item
-  })
-}
 
 // 处理文件选择事件
 const handleSingleFilesSelected = (files: File[] | null, retry = false) => {
@@ -271,36 +247,56 @@ const getSvgIcon = (name: string, style?: CSSProperties) => {
 const aiAvatar = getSvgIcon('AI')
 const welcomeIcon = getSvgIcon('AI', { fontSize: '44px' })
 
-const resolveMessageContent = (message: any) => {
-  if (Array.isArray(message.renderContent) && message.renderContent.length > 0) {
-    return resolveAgentRenderContent(message)
+const resolveMessageContent = (message: RobotMessage) => {
+  if (props.messageContentResolver) {
+    return props.messageContentResolver(message, {
+      messages: messages.value,
+      status: props.status
+    })
   }
 
-  if (isAgentMessage(message) && message.role === 'assistant' && message.content) {
-    const agentStatus = ['success', 'failed', 'fix'].includes(message.metadata?.agentStatus)
-      ? message.metadata.agentStatus
-      : 'failed'
-    return [
-      {
-        type: 'agent-content',
-        status: agentStatus,
-        content: message.content
+  if (Array.isArray(message.renderContent) && message.renderContent.length > 0) {
+    return message.renderContent.map((item) => {
+      if (item?.type === RobotMessageContentType.Img || item?.type === RobotMessageContentType.Image) {
+        return {
+          type: RobotMessageContentType.Img,
+          content: item.content || item.url || item.image_url?.url || ''
+        }
       }
-    ]
+      if (item?.type === RobotMessageContentType.Text) {
+        return {
+          type: RobotMessageContentType.Text,
+          content: item.content ?? item.text ?? ''
+        }
+      }
+      return item
+    })
+  }
+
+  if (Array.isArray(message.content) && message.content.length > 0) {
+    const textContent = extractMessageText(message.content)
+    if (textContent) {
+      return textContent
+    }
+  }
+
+  const textContent = extractMessageText(message.content)
+  if (textContent) {
+    return textContent
   }
 
   return message.content
 }
 
 const roleConfigs: Record<string, BubbleRoleConfig> = {
-  assistant: {
+  [RobotMessageRole.Assistant]: {
     placement: 'start',
     avatar: aiAvatar
   },
-  user: {
+  [RobotMessageRole.User]: {
     placement: 'end'
   },
-  system: {
+  [RobotMessageRole.System]: {
     hidden: true
   }
 }
@@ -320,37 +316,38 @@ const handleSendMessage = async (content: string) => {
     return
   }
 
-  const userMessage: ChatMessage = {
-    role: 'user',
+  const userMessage: RobotMessage = {
+    role: RobotMessageRole.User,
     content: messageContent
   }
   const files = selectedAttachments.value.filter((item) => item.status === 'success')
   if (files.length > 0) {
-    const fileMessages: ChatMessage[] = files.map((file) => ({
-      role: 'user',
-      content: '',
-      renderContent: [
-        {
-          type: 'img',
-          content: file.url
-        }
-      ]
-    }))
-    messages.value.push(...fileMessages)
-    userMessage.content = files
-      .map((item) => ({
-        type: 'image_url',
+    userMessage.content = [
+      {
+        type: RobotMessageContentType.Text,
+        text: messageContent
+      },
+      ...files.map((item) => ({
+        type: RobotMessageContentType.ImageUrl,
         image_url: {
           url: item.url
         }
       }))
-      .concat({
-        type: 'text',
-        text: messageContent
-      })
+    ] as RobotInputContentPart[]
     userMessage.renderContent = [
       {
-        type: 'text',
+        type: RobotMessageContentType.Text,
+        content: messageContent
+      },
+      ...files.map((item) => ({
+        type: RobotMessageContentType.Img,
+        content: item.url
+      }))
+    ]
+  } else {
+    userMessage.renderContent = [
+      {
+        type: RobotMessageContentType.Text,
         content: messageContent
       }
     ]
